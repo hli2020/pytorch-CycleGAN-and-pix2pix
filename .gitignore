@@ -1,5 +1,7 @@
+./idea
 debug*
-datasets/
+#datasets/
+*.jpg
 checkpoints/
 results/
 build/
