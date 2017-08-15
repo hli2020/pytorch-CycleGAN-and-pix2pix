@@ -2,6 +2,7 @@
 debug*
 #datasets/
 *.jpg
+!imgs/edges2cats.jpg
 checkpoints/
 results/
 build/
