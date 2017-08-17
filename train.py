@@ -3,6 +3,8 @@ from options.train_options import TrainOptions
 from data.data_loader import CreateDataLoader
 from models.models import create_model
 from util.visualizer import Visualizer
+from torch.autograd import Variable
+from util.functional_zoo.visualize import make_dot
 
 opt = TrainOptions().parse()
 data_loader = CreateDataLoader(opt)
@@ -14,6 +16,16 @@ model = create_model(opt)
 visualizer = Visualizer(opt)
 
 total_steps = 0
+
+# does not work for now :\
+visualize_net = False #True
+if visualize_net:
+    for i, data in enumerate(dataset):
+        if i == 0:
+            model.set_input(data)
+            output = model.netD_A.forward(Variable(model.input_A))
+            make_dot(output)
+            break
 
 for epoch in range(1, opt.niter + opt.niter_decay + 1):
     epoch_start_time = time.time()

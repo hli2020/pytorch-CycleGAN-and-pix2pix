@@ -1,6 +1,4 @@
-import numpy as np
 import torch
-import os
 from collections import OrderedDict
 from torch.autograd import Variable
 import itertools
@@ -8,9 +6,9 @@ import util.util as util
 from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
-import sys
 
 
+# hyli: this file is of VITAL importance
 class CycleGANModel(BaseModel):
     def name(self):
         return 'CycleGANModel'
