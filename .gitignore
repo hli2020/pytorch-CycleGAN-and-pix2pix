@@ -1,6 +1,6 @@
 .idea/*
 debug*
-#datasets/
+datasets/celebA/
 *.jpg
 !imgs/edges2cats.jpg
 checkpoints/

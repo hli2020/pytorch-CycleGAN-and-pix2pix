@@ -14,6 +14,9 @@ def create_model(opt):
         assert(opt.dataset_mode == 'single')
         from .test_model import TestModel
         model = TestModel()
+    elif opt.model == 'fader_gan':
+        from .fader_gan_model import FaderGANModel
+        model = FaderGANModel()
     else:
         raise ValueError("Model [%s] not recognized." % opt.model)
     model.initialize(opt)
