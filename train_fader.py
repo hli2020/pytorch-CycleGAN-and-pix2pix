@@ -6,9 +6,13 @@ from util.visualizer import Visualizer
 from torch.autograd import Variable
 from util.functional_zoo.visualize import make_dot
 
+# --dataroot datasets/celebA/Img/img_align_celeba --name fader_debug --batchSize 32 --model fader_gan
+# --dataset_mode celebrA --resize_or_crop scale_width_and_crop
 opt = TrainOptions().parse()
+
 data_loader = CreateDataLoader(opt)
 dataset = data_loader.load_data()
+dataset_debug = data_loader.load_data_debug()
 dataset_size = len(data_loader)
 print('#training images = %d' % dataset_size)
 

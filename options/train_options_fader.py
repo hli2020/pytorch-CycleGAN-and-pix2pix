@@ -20,8 +20,8 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--lr', type=float, default=0.0002, help='initial learning rate for adam')
 
         self.parser.add_argument('--no_lsgan', action='store_true', help='do *not* use least square GAN, if false, use vanilla GAN')
-        self.parser.add_argument('--batchSize', type=int, default=32, help='batch size')
-        self.parser.add_argument('--model', type=str, default='fader_gan', help='model name')
+        self.parser.add_argument('--train_size', type=int, default=2000) #162770
+        self.parser.add_argument('--anno_file', type=str, default='datasets/celebA/Anno/list_attr_celeba_hyli.txt')
 
         # trick to stabilize training
         self.parser.add_argument('--pool_size', type=int, default=50, help='the size of image buffer that stores previously generated images')

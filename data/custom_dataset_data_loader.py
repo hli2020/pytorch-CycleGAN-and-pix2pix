@@ -13,6 +13,9 @@ def CreateDataset(opt):
     elif opt.dataset_mode == 'single':
         from data.single_dataset import SingleDataset
         dataset = SingleDataset()
+    elif opt.dataset_mode == 'celebA':
+        from data.celebrA_dataset import CelebrADataset
+        dataset = CelebrADataset()
     else:
         raise ValueError("Dataset [%s] not recognized." % opt.dataset_mode)
 
@@ -36,6 +39,9 @@ class CustomDatasetDataLoader(BaseDataLoader):
 
     def load_data(self):
         return self.dataloader
+
+    def load_data_debug(self):
+        return self.dataset
 
     def __len__(self):
         return min(len(self.dataset), self.opt.max_dataset_size)
