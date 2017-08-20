@@ -28,6 +28,27 @@ def get_norm_layer(norm_type='instance'):
     return norm_layer
 
 
+def define_fader_ED(input_nc, output_nc, ngf, which_structure, norm='batch', use_dropout=False, gpu_ids=[]):
+
+    net_ED = None
+    use_gpu = len(gpu_ids) > 0
+    norm_layer = get_norm_layer(norm_type=norm)
+
+    if use_gpu:
+        assert(torch.cuda.is_available())
+
+    if which_structure == 'paper_default':
+        net_ED = EncoderDecoder(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids)
+    else:
+        raise NotImplementedError('Generator model name [%s] is not recognized' % which_structure)
+
+    if len(gpu_ids) > 0:
+        net_ED.cuda(device_id=gpu_ids[0])
+
+    net_ED.apply(weights_init)
+    return net_ED
+
+
 def define_G(input_nc, output_nc, ngf, which_model_netG, norm='batch', use_dropout=False, gpu_ids=[]):
     netG = None
     use_gpu = len(gpu_ids) > 0
@@ -85,6 +106,20 @@ def print_network(net):
 # Classes
 ##############################################################################
 
+# Defines the encoder-decoder structure in the fader networks
+class EncoderDecoder(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[]):
+        super(EncoderDecoder, self).__init__()
+        self.input_nc = input_nc
+        self.output_nc = output_nc
+        self.ngf = ngf
+        self.gpu_ids = gpu_ids
+
+    def forward(self, input):
+        if self.gpu_ids and isinstance(input.data, torch.cuda.FloatTensor):
+            return nn.parallel.data_parallel(self.model, input, self.gpu_ids)
+        else:
+            return self.model(input)
 
 # Defines the GAN loss which uses either LSGAN or the regular GAN.
 # When LSGAN is used, it is basically same as MSELoss,
