@@ -13,7 +13,7 @@ def CreateDataset(opt):
     elif opt.dataset_mode == 'single':
         from data.single_dataset import SingleDataset
         dataset = SingleDataset()
-    elif opt.dataset_mode == 'celebA':
+    elif opt.dataset_mode == 'celebrA':
         from data.celebrA_dataset import CelebrADataset
         dataset = CelebrADataset()
     else:

@@ -6,7 +6,7 @@ import util.util as util
 from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
-
+import numpy as np
 
 # hyli: this file is of VITAL importance
 class FaderGANModel(BaseModel):
@@ -16,62 +16,76 @@ class FaderGANModel(BaseModel):
     def initialize(self, opt):
         BaseModel.initialize(self, opt)
 
-        nb = opt.batchSize
-        size = opt.fineSize
-
+        self.factor = opt.factor
         # load/define networks
-        # TODO
-        self.fader_ED = networks.define_D(opt.input_nc, opt.output_nc, opt.ngf, opt.faderG_type,
-                                          opt.norm, opt.no_dropout, opt.gpu_ids)
+        self.fader_encoder = networks.define_fader_encoder(ngf=opt.ngf,
+                                                           which_structure=opt.which_structure,
+                                                           gpu_ids=opt.gpu_ids)
+        self.fader_decoder = networks.define_fader_decoder(opt.ngf, opt.which_structure, gpu_ids=opt.gpu_ids)
 
         if self.isTrain:
             use_sigmoid = opt.no_lsgan
-            self.netD = networks.define_D(opt.output_nc, opt.ndf, opt.which_model_netD,
-                                          opt.n_layers_D, opt.norm, use_sigmoid, self.gpu_ids)
+            self.netD = networks.define_D(opt.input_nc, opt.ndf, opt.which_structure,
+                                          use_sigmoid=use_sigmoid, gpu_ids=self.gpu_ids, attri_n=opt.attri_n)
 
         # resume, TODO
         if not self.isTrain or opt.continue_train:
-            which_epoch = opt.which_epoch
-            self.load_network(self.netG_A, 'G_A', which_epoch)
+            which_epoch = opt.which_epoch   # no such parameter
+            self.load_network(self.net, '', which_epoch)
             if self.isTrain:
-                self.load_network(self.netD_A, 'D_A', which_epoch)
-                self.load_network(self.netD_B, 'D_B', which_epoch)
+                self.load_network(self.netD, '', which_epoch)
 
+        # optimizer, loss
         if self.isTrain:
             self.old_lr = opt.lr
-            self.fake_A_pool = ImagePool(opt.pool_size)
-            self.fake_B_pool = ImagePool(opt.pool_size)
+            # self.fake_A_pool = ImagePool(opt.pool_size)
+            # self.fake_B_pool = ImagePool(opt.pool_size)
 
             # define loss functions
-            self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan, tensor=self.Tensor)
-            self.criterionCycle = torch.nn.L1Loss()
-            self.criterionIdt = torch.nn.L1Loss()
+            self.criterion_mse = torch.nn.MSELoss()
+            self.criterion_bce = torch.nn.BCEWithLogitsLoss()
 
             # initialize optimizers
-            self.optimizer_ED = torch.optim.Adam(self.fader_ED.parameters(),lr=opt.lr, betas=(opt.beta1, 0.999))
-            self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+            self.optimizer_encoder = torch.optim.Adam(self.fader_encoder.parameters(),
+                                                      lr=opt.lr, betas=(opt.beta1, 0.999))
+            self.optimizer_decoder = torch.optim.Adam(self.fader_decoder.parameters(),
+                                                      lr=opt.lr, betas=(opt.beta1, 0.999))
+            self.optimizer_D = torch.optim.Adam(self.netD.parameters(),
+                                                lr=opt.lr, betas=(opt.beta1, 0.999))
+
+        if 1:
+            # always use gpu mode
+            self.criterion_bce.cuda()
+            self.criterion_mse.cuda()
+            self.fader_decoder.cuda()
+            self.fader_encoder.cuda()
+            self.netD.cuda()
 
         print('---------- Networks initialized -------------')
-        networks.print_network(self.netG_A)
-        networks.print_network(self.netG_B)
+        networks.print_network(self.fader_encoder)
+        networks.print_network(self.fader_decoder)
         if self.isTrain:
-            networks.print_network(self.netD_A)
-            networks.print_network(self.netD_B)
+            networks.print_network(self.netD)
         print('-----------------------------------------------')
 
     def set_input(self, input):
-        AtoB = self.opt.which_direction == 'AtoB'
-        input_A = input['A' if AtoB else 'B']
-        input_B = input['B' if AtoB else 'A']
-        self.input_A.resize_(input_A.size()).copy_(input_A)
-        self.input_B.resize_(input_B.size()).copy_(input_B)
-        self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
-    def forward(self):
-        self.real_A = Variable(self.input_A)
-        self.real_B = Variable(self.input_B)
+        self.image = input['im']    # 32 x 3 x 256 x 256
+        self.image.resize_(self.image.size()).copy_(self.image)
+        self.image = self.image.cuda()
+
+        # to (32 x 80 x 1 x 1) TensorFloat
+        temp_ = torch.t(torch.stack(input['anno']))
+        mask = torch.eq(temp_, -1)
+        temp_[mask] = 0
+        self.target = Variable(temp_.float().cuda())
+        self.anno = torch.cat((temp_, (1 - temp_)), dim=1).float().cuda()
+        actual_batch_size = self.image.shape[0]
+        self.anno.resize_([actual_batch_size, 2*self.opt.attri_n, 1, 1])
+        self.image_paths = input['im_path']
 
     def test(self):
+        # TODO
         self.real_A = Variable(self.input_A, volatile=True)
         self.fake_B = self.netG_A.forward(self.real_A)
         self.rec_A = self.netG_B.forward(self.fake_B)
@@ -80,97 +94,49 @@ class FaderGANModel(BaseModel):
         self.fake_A = self.netG_B.forward(self.real_B)
         self.rec_B = self.netG_A.forward(self.fake_A)
 
-    # get image paths
-    def get_image_paths(self):
-        return self.image_paths
+    def compute_loss(self):
 
-    def backward_D_basic(self, netD, real, fake):
-        # Real
-        pred_real = netD.forward(real)
-        loss_D_real = self.criterionGAN(pred_real, True)
-        # Fake
-        pred_fake = netD.forward(fake.detach())
-        loss_D_fake = self.criterionGAN(pred_fake, False)
-        # Combined loss
-        loss_D = (loss_D_real + loss_D_fake) * 0.5
-        # backward
-        loss_D.backward()
-        return loss_D
+        # forward the encoder-decoder first, then compute the loss
+        encoder_out = self.fader_encoder(Variable(self.image))
+        decoder_out = self.fader_decoder(encoder_out, Variable(self.anno))
+        discri_out = self.netD(encoder_out)
 
-    def backward_D_A(self):
-        fake_B = self.fake_B_pool.query(self.fake_B)
-        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B)
+        loss_mse = self.criterion_mse(decoder_out, Variable(self.image))
+        loss_bce_decoder = self.criterion_bce(discri_out, (1-self.target))
+        loss_bce_disc = self.criterion_bce(discri_out, self.target)
 
-    def backward_D_B(self):
-        fake_A = self.fake_A_pool.query(self.fake_A)
-        self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A)
+        # factor = 0.0001
+        self.loss_all = loss_mse + self.factor * loss_bce_decoder + loss_bce_disc
 
-    def backward_G(self):
-        lambda_idt = self.opt.identity
-        lambda_A = self.opt.lambda_A
-        lambda_B = self.opt.lambda_B
-        # Identity loss
-        if lambda_idt > 0:
-            # G_A should be identity if real_B is fed.
-            self.idt_A = self.netG_A.forward(self.real_B)
-            self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt
-            # G_B should be identity if real_A is fed.
-            self.idt_B = self.netG_B.forward(self.real_A)
-            self.loss_idt_B = self.criterionIdt(self.idt_B, self.real_A) * lambda_A * lambda_idt
-        else:
-            self.loss_idt_A = 0
-            self.loss_idt_B = 0
+        self.loss_all_value = self.loss_all.data[0]
+        self.loss_mse_value = loss_mse.data[0]
+        self.loss_bce_decoder_value = loss_bce_decoder.data[0]
+        self.loss_bce_disc_value = loss_bce_disc.data[0]
 
-        # GAN loss
-        # D_A(G_A(A))
-        self.fake_B = self.netG_A.forward(self.real_A)
-        pred_fake = self.netD_A.forward(self.fake_B)
-        self.loss_G_A = self.criterionGAN(pred_fake, True)
-        # D_B(G_B(B))
-        self.fake_A = self.netG_B.forward(self.real_B)
-        pred_fake = self.netD_B.forward(self.fake_A)
-        self.loss_G_B = self.criterionGAN(pred_fake, True)
-        # Forward cycle loss
-        self.rec_A = self.netG_B.forward(self.fake_B)
-        self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
-        # Backward cycle loss
-        self.rec_B = self.netG_A.forward(self.fake_A)
-        self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
-        # combined loss
-        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B
-        self.loss_G.backward()
 
     def optimize_parameters(self):
-        # forward
-        self.forward()
-        # G_A and G_B
-        self.optimizer_G.zero_grad()
-        self.backward_G()
-        self.optimizer_G.step()
-        # D_A
-        self.optimizer_D_A.zero_grad()
-        self.backward_D_A()
-        self.optimizer_D_A.step()
-        # D_B
-        self.optimizer_D_B.zero_grad()
-        self.backward_D_B()
-        self.optimizer_D_B.step()
+
+        self.optimizer_encoder.zero_grad()
+        self.optimizer_decoder.zero_grad()
+        self.optimizer_D.zero_grad()
+
+        self.compute_loss()
+        self.loss_all.backward()
+
+        self.optimizer_encoder.step()
+        self.optimizer_decoder.step()
+        self.optimizer_D.step()
+
 
     def get_current_errors(self):
-        D_A = self.loss_D_A.data[0]
-        G_A = self.loss_G_A.data[0]
-        Cyc_A = self.loss_cycle_A.data[0]
-        D_B = self.loss_D_B.data[0]
-        G_B = self.loss_G_B.data[0]
-        Cyc_B = self.loss_cycle_B.data[0]
-        if self.opt.identity > 0.0:
-            idt_A = self.loss_idt_A.data[0]
-            idt_B = self.loss_idt_B.data[0]
-            return OrderedDict([('D_A', D_A), ('G_A', G_A), ('Cyc_A', Cyc_A), ('idt_A', idt_A),
-                                ('D_B', D_B), ('G_B', G_B), ('Cyc_B', Cyc_B), ('idt_B', idt_B)])
-        else:
-            return OrderedDict([('D_A', D_A), ('G_A', G_A), ('Cyc_A', Cyc_A),
-                                ('D_B', D_B), ('G_B', G_B), ('Cyc_B', Cyc_B)])
+        loss_all = self.loss_all_value
+        loss_bce_decoder = self.loss_bce_decoder_value
+        loss_bce_disc = self.loss_bce_disc_value
+        loss_mse = self.loss_mse_value
+
+        return OrderedDict([('loss_all', loss_all), ('loss_bce_decoder', loss_bce_decoder),
+                            ('loss_bce_disc', loss_bce_disc), ('loss_mse', loss_mse)])
+
 
     def get_current_visuals(self):
         real_A = util.tensor2im(self.real_A.data)
@@ -189,19 +155,18 @@ class FaderGANModel(BaseModel):
                                 ('real_B', real_B), ('fake_A', fake_A), ('rec_B', rec_B)])
 
     def save(self, label):
-        self.save_network(self.netG_A, 'G_A', label, self.gpu_ids)
-        self.save_network(self.netD_A, 'D_A', label, self.gpu_ids)
-        self.save_network(self.netG_B, 'G_B', label, self.gpu_ids)
-        self.save_network(self.netD_B, 'D_B', label, self.gpu_ids)
+        self.save_network(self.netD, 'netD', label, self.gpu_ids)
+        self.save_network(self.fader_encoder, 'fader_encoder', label, self.gpu_ids)
+        self.save_network(self.fader_decoder, 'fader_decoder', label, self.gpu_ids)
 
     def update_learning_rate(self):
         lrd = self.opt.lr / self.opt.niter_decay
         lr = self.old_lr - lrd
-        for param_group in self.optimizer_D_A.param_groups:
+        for param_group in self.optimizer_D.param_groups:
             param_group['lr'] = lr
-        for param_group in self.optimizer_D_B.param_groups:
+        for param_group in self.optimizer_decoder.param_groups:
             param_group['lr'] = lr
-        for param_group in self.optimizer_G.param_groups:
+        for param_group in self.optimizer_encoder.param_groups:
             param_group['lr'] = lr
 
         print('update learning rate: %f -> %f' % (self.old_lr, lr))

@@ -28,9 +28,8 @@ def get_norm_layer(norm_type='instance'):
     return norm_layer
 
 
-def define_fader_ED(input_nc, output_nc, ngf, which_structure, norm='batch', use_dropout=False, gpu_ids=[]):
+def define_fader_encoder(ngf, which_structure, norm='batch', use_dropout=False, gpu_ids=[]):
 
-    net_ED = None
     use_gpu = len(gpu_ids) > 0
     norm_layer = get_norm_layer(norm_type=norm)
 
@@ -38,15 +37,36 @@ def define_fader_ED(input_nc, output_nc, ngf, which_structure, norm='batch', use
         assert(torch.cuda.is_available())
 
     if which_structure == 'paper_default':
-        net_ED = EncoderDecoder(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids)
+        net_encoder = Encoder(ngf, norm_layer=norm_layer, use_dropout=use_dropout, gpu_ids=gpu_ids)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % which_structure)
 
     if len(gpu_ids) > 0:
-        net_ED.cuda(device_id=gpu_ids[0])
+        net_encoder.cuda(device_id=gpu_ids[0])
 
-    net_ED.apply(weights_init)
-    return net_ED
+    net_encoder.apply(weights_init)
+    return net_encoder
+
+
+def define_fader_decoder(ngf, which_structure, norm='batch', use_dropout=False, gpu_ids=[], attri_n=40):
+
+    use_gpu = len(gpu_ids) > 0
+    norm_layer = get_norm_layer(norm_type=norm)
+
+    if use_gpu:
+        assert(torch.cuda.is_available())
+
+    if which_structure == 'paper_default':
+        net_decoder = Decoder(ngf, norm_layer=norm_layer,
+                              use_dropout=use_dropout, gpu_ids=gpu_ids, attri_n=attri_n)
+    else:
+        raise NotImplementedError('Generator model name [%s] is not recognized' % which_structure)
+
+    if len(gpu_ids) > 0:
+        net_decoder.cuda(device_id=gpu_ids[0])
+
+    net_decoder.apply(weights_init)
+    return net_decoder
 
 
 def define_G(input_nc, output_nc, ngf, which_model_netG, norm='batch', use_dropout=False, gpu_ids=[]):
@@ -74,7 +94,7 @@ def define_G(input_nc, output_nc, ngf, which_model_netG, norm='batch', use_dropo
 
 
 def define_D(input_nc, ndf, which_model_netD,
-             n_layers_D=3, norm='batch', use_sigmoid=False, gpu_ids=[]):
+             n_layers_D=3, norm='batch', use_sigmoid=False, gpu_ids=[], attri_n=40):
     netD = None
     use_gpu = len(gpu_ids) > 0
     norm_layer = get_norm_layer(norm_type=norm)
@@ -85,6 +105,8 @@ def define_D(input_nc, ndf, which_model_netD,
         netD = NLayerDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer, use_sigmoid=use_sigmoid, gpu_ids=gpu_ids)
     elif which_model_netD == 'n_layers':
         netD = NLayerDiscriminator(input_nc, ndf, n_layers_D, norm_layer=norm_layer, use_sigmoid=use_sigmoid, gpu_ids=gpu_ids)
+    elif which_model_netD == 'paper_default':
+        netD = FaderDiscriminator(norm_layer=norm_layer, use_sigmoid=use_sigmoid, gpu_ids=gpu_ids, atrri_n=attri_n)
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' %
                                   which_model_netD)
@@ -107,19 +129,124 @@ def print_network(net):
 ##############################################################################
 
 # Defines the encoder-decoder structure in the fader networks
-class EncoderDecoder(nn.Module):
-    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[]):
-        super(EncoderDecoder, self).__init__()
-        self.input_nc = input_nc
-        self.output_nc = output_nc
+class Encoder(nn.Module):
+    def __init__(self, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[]):
+        super(Encoder, self).__init__()
         self.ngf = ngf
         self.gpu_ids = gpu_ids
+
+        # define the encoder, take image (256x256x3) as input
+        model = [nn.ReflectionPad2d(3),
+                 nn.Conv2d(3, 16, kernel_size=7, padding=0),
+                 norm_layer(16),
+                 nn.LeakyReLU(0.2, inplace=True)]
+
+        n_repeat = 6
+        for i in range(n_repeat):
+            input_nc = int(ngf * 2 ** (i-2))
+
+            if i == (n_repeat-1):
+                output_nc = int(input_nc)
+            else:
+                output_nc = int(2 * input_nc)
+
+            model += [nn.Conv2d(input_nc, output_nc, kernel_size=4, stride=2, padding=1),
+                      norm_layer(output_nc),
+                      nn.LeakyReLU(0.2, inplace=True)]
+
+        self.model = nn.Sequential(*model)
 
     def forward(self, input):
         if self.gpu_ids and isinstance(input.data, torch.cuda.FloatTensor):
             return nn.parallel.data_parallel(self.model, input, self.gpu_ids)
         else:
             return self.model(input)
+
+
+class Decoder(nn.Module):
+    def __init__(self, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[], attri_n=40):
+        super(Decoder, self).__init__()
+        self.ngf = ngf
+        self.gpu_ids = gpu_ids
+
+        # take E(x) (4x4x512) and y as input
+        input_nc = ngf * 2 ** 3
+        output_nc = ngf * 2 ** 3
+        cat_model = []
+
+        self.n_repeat = 6
+        for i in range(self.n_repeat):
+
+            if i != 0:
+                input_nc = ngf * 2 ** (-i+4)
+                output_nc = .5 * input_nc
+
+            input_nc = int(input_nc)
+            output_nc = int(output_nc)
+            # model += [nn.ConvTranspose2d(input_nc, output_nc, kernel_size=4, stride=2, padding=1),
+            cat_model += [convConcat(input_nc, output_nc, kernel_size=4, stride=2, padding=1,
+                                 attri_n=attri_n, gpu_ids=gpu_ids),
+                      norm_layer(output_nc),
+                      nn.ReLU(True)]
+            setattr(self, 'convcat_{}'.format(i), cat_model[-3])
+            setattr(self, 'batchnorm_{}'.format(i), cat_model[-2])
+            setattr(self, 'relu_{}'.format(i), cat_model[-1])
+
+        # last_layer_input_nc = output_nc + 2 * attri_n
+        model = []
+        last_layer_input_nc = output_nc
+        model += [nn.ReflectionPad2d(3)]
+        model += [nn.Conv2d(last_layer_input_nc, 3, kernel_size=7, padding=0)]
+        model += [nn.Tanh()]
+
+        self.final_conv = model[-2]
+        self.final_pad = model[-3]
+        self.final_tanh = model[-1]
+
+        # self.model = nn.Sequential(*model)
+        self.cat_model = cat_model
+        self.model = model
+
+    def forward(self, input, anno):
+        # TODO: for now only apply single GPU mode for the decoder
+        # if len(self.gpu_ids) > 1 and isinstance(input.data, torch.cuda.FloatTensor):
+        #     return nn.parallel.data_parallel(self.model, input, self.gpu_ids)
+        # else:
+        #     return self.model(input, anno)
+
+        ft = input
+        for i in range(self.n_repeat):
+            ft = self.cat_model[i * 3](ft, anno)
+            ft = self.cat_model[i * 3 + 1](ft)
+            ft = self.cat_model[i * 3 + 2](ft)
+
+        out = self.model[2](self.model[1](self.model[0](ft)))
+        return out
+
+
+class convConcat(nn.Module):    # do not name under 'ConvXXX' as in weights_init
+    def __init__(self, in_nc, out_nc, kernel_size, stride, padding, attri_n, gpu_ids):
+        super(convConcat, self).__init__()
+        self.gpu_ids = gpu_ids
+        in_nc_aug = int(in_nc + 2 * attri_n)
+        basic = [nn.ConvTranspose2d(in_nc_aug, out_nc, kernel_size=kernel_size, stride=stride, padding=padding)]
+        self.conv = nn.Sequential(*basic)
+
+    def forward(self, input, anno):
+
+        # input: [batch_size x 256 x 4 x 4], Variable
+        # anno: [batch_size x 2n x 1 x 1], Variable
+        spatial_size = input.data.shape[2]
+        anno = anno.repeat(1, 1, spatial_size, spatial_size)
+
+        try:
+            input = torch.cat((input, anno), dim=1)
+        except RuntimeError: #ValueError:
+            print('input {}'.format(input.size()))
+            print('anno {}'.format(anno.size()))
+            raise
+
+        return self.conv(input)
 
 # Defines the GAN loss which uses either LSGAN or the regular GAN.
 # When LSGAN is used, it is basically same as MSELoss,
@@ -383,3 +510,40 @@ class NLayerDiscriminator(nn.Module):
             return nn.parallel.data_parallel(self.model, input, self.gpu_ids)
         else:
             return self.model(input)
+
+
+class FaderDiscriminator(nn.Module):
+    def __init__(self, norm_layer=nn.BatchNorm2d, use_sigmoid=False, gpu_ids=[], atrri_n=40):
+        super(FaderDiscriminator, self).__init__()
+        self.gpu_ids = gpu_ids
+        linear_input_dim = 512 * 4 * 4
+
+        self.conv = nn.Sequential(
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            norm_layer(512),
+            nn.LeakyReLU(0.2, True)
+        )
+        sequence = []
+        sequence += [
+            nn.Linear(linear_input_dim, 512),
+            nn.BatchNorm1d(512),
+            nn.Dropout(0.3)
+        ]
+
+        sequence += [
+            nn.Linear(512, 512),
+            nn.BatchNorm1d(512),
+            nn.Dropout(0.3)
+        ]
+
+        sequence += [nn.Linear(512, atrri_n)]
+        if use_sigmoid:
+            sequence += [nn.Sigmoid()]
+
+        # TODO: do not use Sequential
+        self.fc = nn.Sequential(*sequence)
+
+    def forward(self, input):
+        out = self.conv(input)
+        out = out.view(out.size(0), -1)
+        return self.fc(out)

@@ -5,6 +5,7 @@ import time
 from . import util
 from . import html
 
+
 class Visualizer():
     def __init__(self, opt):
         # self.opt = opt
@@ -12,16 +13,18 @@ class Visualizer():
         self.use_html = opt.isTrain and not opt.no_html
         self.win_size = opt.display_winsize
         self.name = opt.name
+
         if self.display_id > 0:
             import visdom
-            self.vis = visdom.Visdom(port = opt.display_port)
+            self.vis = visdom.Visdom(port=opt.display_port)
             self.display_single_pane_ncols = opt.display_single_pane_ncols
 
-        if self.use_html:
+        if self.use_html & (opt.model != 'fader_gan'):
             self.web_dir = os.path.join(opt.checkpoints_dir, opt.name, 'web')
             self.img_dir = os.path.join(self.web_dir, 'images')
             print('create web directory %s...' % self.web_dir)
             util.mkdirs([self.web_dir, self.img_dir])
+
         self.log_name = os.path.join(opt.checkpoints_dir, opt.name, 'loss_log.txt')
         with open(self.log_name, "a") as log_file:
             now = time.strftime("%c")
@@ -117,7 +120,7 @@ class Visualizer():
         with open(self.log_name, "a") as log_file:
             log_file.write('%s\n' % message)
 
-    # save image to the disk
+    # save image to the disk (for test)
     def save_images(self, webpage, visuals, image_path):
         image_dir = webpage.get_image_dir()
         short_path = ntpath.basename(image_path[0])

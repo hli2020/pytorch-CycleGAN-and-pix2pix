@@ -6,8 +6,8 @@ from util.visualizer import Visualizer
 from torch.autograd import Variable
 from util.functional_zoo.visualize import make_dot
 
-# --dataroot datasets/celebA/Img/img_align_celeba --name fader_debug --batchSize 32 --model fader_gan
-# --dataset_mode celebrA --resize_or_crop scale_width_and_crop
+# --dataroot datasets/celebA/Img/img_align_celeba --name fader_debug
+# --model fader_gan --dataset_mode celebrA --resize_or_crop scale_width_and_crop
 opt = TrainOptions().parse()
 
 data_loader = CreateDataLoader(opt)
@@ -17,7 +17,7 @@ dataset_size = len(data_loader)
 print('#training images = %d' % dataset_size)
 
 model = create_model(opt)
-# visualizer = Visualizer(opt)
+visualizer = Visualizer(opt)
 
 total_steps = 0
 
@@ -27,18 +27,23 @@ for epoch in range(1, opt.niter + opt.niter_decay + 1):
         iter_start_time = time.time()
         total_steps += opt.batchSize
         epoch_iter = total_steps - dataset_size * (epoch - 1)
+
         model.set_input(data)
         model.optimize_parameters()
 
         # if total_steps % opt.display_freq == 0:
         #     visualizer.display_current_results(model.get_current_visuals(), epoch)
-        #
-        # if total_steps % opt.print_freq == 0:
-        #     errors = model.get_current_errors()
-        #     t = (time.time() - iter_start_time) / opt.batchSize
-        #     visualizer.print_current_errors(epoch, epoch_iter, errors, t)
-        #     if opt.display_id > 0:
-        #         visualizer.plot_current_errors(epoch, float(epoch_iter)/dataset_size, opt, errors)
+
+        if total_steps % opt.print_freq == 0:
+            errors = model.get_current_errors()
+            t = (time.time() - iter_start_time) / opt.batchSize
+            visualizer.print_current_errors(epoch, epoch_iter, errors, t)
+            if opt.display_id > 0:
+                visualizer.plot_current_errors(epoch, float(epoch_iter)/dataset_size, opt, errors)
+
+        # print('loss all: {:.4f}, loss bce_disc: {:.4f}, loss bce_decoder: {:.4f}, loss mse: {:.4f}'.format(
+        #     model.loss_all_value, model.loss_bce_disc_value,
+        #     model.loss_bce_decoder_value, model.loss_mse_value))
 
         if total_steps % opt.save_latest_freq == 0:
             print('saving the latest model (epoch %d, total_steps %d)' %
@@ -50,7 +55,6 @@ for epoch in range(1, opt.niter + opt.niter_decay + 1):
               (epoch, total_steps))
         model.save('latest')
         model.save(epoch)
-
     print('End of epoch %d / %d \t Time Taken: %d sec' %
           (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
 
