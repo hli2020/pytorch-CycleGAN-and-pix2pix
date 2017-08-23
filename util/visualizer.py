@@ -13,6 +13,7 @@ class Visualizer():
         self.use_html = opt.isTrain and not opt.no_html
         self.win_size = opt.display_winsize
         self.name = opt.name
+        self.continue_train = opt.continue_train
 
         if self.display_id > 0:
             import visdom
@@ -112,7 +113,12 @@ class Visualizer():
 
     # errors: same format as |errors| of plotCurrentErrors
     def print_current_errors(self, epoch, i, errors, t):
-        message = '(epoch: %d, iters: %d, time: %.3f) ' % (epoch, i, t)
+
+        if self.continue_train:
+            prefix = 'continue_v0 '
+        else:
+            prefix = ''
+        message = '%s(epoch: %d, iters: %d, time: %.3f) ' % (prefix, epoch, i, t)
         for k, v in errors.items():
             message += '%s: %.3f ' % (k, v)
 

@@ -16,6 +16,7 @@ class FaderGANModel(BaseModel):
     def initialize(self, opt):
         BaseModel.initialize(self, opt)
 
+        self.gpu_mode = (len(opt.gpu_ids) > 1) | (opt.gpu_ids != -1)
         self.factor = opt.factor
         # load/define networks
         self.fader_encoder = networks.define_fader_encoder(ngf=opt.ngf,
@@ -28,12 +29,14 @@ class FaderGANModel(BaseModel):
             self.netD = networks.define_D(opt.input_nc, opt.ndf, opt.which_structure,
                                           use_sigmoid=use_sigmoid, gpu_ids=self.gpu_ids, attri_n=opt.attri_n)
 
-        # resume, TODO
+        # resume
+        # TODO: lr, epoch_iter are NOT udpated (still from zero-index)
         if not self.isTrain or opt.continue_train:
-            which_epoch = opt.which_epoch   # no such parameter
-            self.load_network(self.net, '', which_epoch)
+            which_epoch = opt.which_epoch
+            self.load_network(self.fader_decoder, 'fader_decoder', which_epoch)
+            self.load_network(self.fader_encoder, 'fader_encoder', which_epoch)
             if self.isTrain:
-                self.load_network(self.netD, '', which_epoch)
+                self.load_network(self.netD, 'netD', which_epoch)
 
         # optimizer, loss
         if self.isTrain:
@@ -53,10 +56,14 @@ class FaderGANModel(BaseModel):
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(),
                                                 lr=opt.lr, betas=(opt.beta1, 0.999))
 
-        if 1:
-            # always use gpu mode
+        if self.gpu_mode:
             self.criterion_bce.cuda()
             self.criterion_mse.cuda()
+            # if len(self.gpu_ids) > 1:
+            #     self.fader_decoder = torch.nn.DataParallel(self.fader_decoder, device_ids=self.gpu_ids).cuda()
+            #     self.fader_encoder = torch.nn.DataParallel(self.fader_encoder, device_ids=self.gpu_ids).cuda()
+            #     self.netD = torch.nn.DataParallel(self.netD, device_ids=self.gpu_ids).cuda()
+            # else:
             self.fader_decoder.cuda()
             self.fader_encoder.cuda()
             self.netD.cuda()
@@ -105,7 +112,6 @@ class FaderGANModel(BaseModel):
         loss_bce_decoder = self.criterion_bce(discri_out, (1-self.target))
         loss_bce_disc = self.criterion_bce(discri_out, self.target)
 
-        # factor = 0.0001
         self.loss_all = loss_mse + self.factor * loss_bce_decoder + loss_bce_disc
 
         self.loss_all_value = self.loss_all.data[0]
@@ -139,6 +145,7 @@ class FaderGANModel(BaseModel):
 
 
     def get_current_visuals(self):
+        # DEPRECATED
         real_A = util.tensor2im(self.real_A.data)
         fake_B = util.tensor2im(self.fake_B.data)
         rec_A = util.tensor2im(self.rec_A.data)
