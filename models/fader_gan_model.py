@@ -17,6 +17,7 @@ class FaderGANModel(BaseModel):
         BaseModel.initialize(self, opt)
 
         self.gpu_mode = (len(opt.gpu_ids) > 1) | (opt.gpu_ids != -1)
+        self.united_optim = opt.united_optim
         self.factor = opt.factor
         # load/define networks
         self.fader_encoder = networks.define_fader_encoder(ngf=opt.ngf,
@@ -101,38 +102,53 @@ class FaderGANModel(BaseModel):
         self.fake_A = self.netG_B.forward(self.real_B)
         self.rec_B = self.netG_A.forward(self.fake_A)
 
-    def compute_loss(self):
-
-        # forward the encoder-decoder first, then compute the loss
-        encoder_out = self.fader_encoder(Variable(self.image))
-        decoder_out = self.fader_decoder(encoder_out, Variable(self.anno))
-        discri_out = self.netD(encoder_out)
-
-        loss_mse = self.criterion_mse(decoder_out, Variable(self.image))
-        loss_bce_decoder = self.criterion_bce(discri_out, (1-self.target))
-        loss_bce_disc = self.criterion_bce(discri_out, self.target)
-
-        self.loss_all = loss_mse + self.factor * loss_bce_decoder + loss_bce_disc
-
-        self.loss_all_value = self.loss_all.data[0]
-        self.loss_mse_value = loss_mse.data[0]
-        self.loss_bce_decoder_value = loss_bce_decoder.data[0]
-        self.loss_bce_disc_value = loss_bce_disc.data[0]
-
-
     def optimize_parameters(self):
 
         self.optimizer_encoder.zero_grad()
         self.optimizer_decoder.zero_grad()
         self.optimizer_D.zero_grad()
 
-        self.compute_loss()
-        self.loss_all.backward()
+        # forward the encoder-decoder first, then compute the loss
+        encoder_out = self.fader_encoder(Variable(self.image))
 
-        self.optimizer_encoder.step()
-        self.optimizer_decoder.step()
-        self.optimizer_D.step()
+        if self.united_optim:
+            discri_out = self.netD(encoder_out)
+            loss_bce_disc = self.criterion_bce(discri_out, self.target)
 
+            decoder_out = self.fader_decoder(encoder_out, Variable(self.anno))
+            loss_mse = self.criterion_mse(decoder_out, Variable(self.image))
+            loss_bce_decoder = self.criterion_bce(discri_out, (1-self.target))
+
+            self.loss_all = loss_mse + self.factor * loss_bce_decoder + loss_bce_disc
+            self.loss_all.backward()
+
+            self.optimizer_D.step()
+            self.optimizer_encoder.step()
+            self.optimizer_decoder.step()
+        else:
+            _input = encoder_out.detach()
+            discri_out = self.netD(_input)
+            loss_bce_disc = self.criterion_bce(discri_out, self.target)
+            loss_bce_disc.backward()
+            self.optimizer_D.step()
+
+            decoder_out = self.fader_decoder(encoder_out, Variable(self.anno))
+            loss_mse = self.criterion_mse(decoder_out, Variable(self.image))
+            discri_out = self.netD(encoder_out)
+            loss_bce_decoder = self.criterion_bce(discri_out, (1-self.target))
+
+            _temp = loss_mse + loss_bce_decoder
+            _temp.backward()
+            self.optimizer_encoder.step()
+            self.optimizer_decoder.step()
+
+            # just for log purpose
+            self.loss_all = loss_mse + self.factor * loss_bce_decoder + loss_bce_disc
+
+        self.loss_all_value = self.loss_all.data[0]
+        self.loss_mse_value = loss_mse.data[0]
+        self.loss_bce_decoder_value = loss_bce_decoder.data[0]
+        self.loss_bce_disc_value = loss_bce_disc.data[0]
 
     def get_current_errors(self):
         loss_all = self.loss_all_value
