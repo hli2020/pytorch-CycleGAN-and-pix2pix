@@ -4,7 +4,7 @@ from data.data_loader import CreateDataLoader
 from models.models import create_model
 from util.visualizer import Visualizer
 from torch.autograd import Variable
-from util.functional_zoo.visualize import make_dot
+#from util.functional_zoo.visualize import make_dot
 
 # --dataroot datasets/celebA/Img/img_align_celeba --name fader_debug
 # --model fader_gan --dataset_mode celebrA --resize_or_crop scale_width_and_crop
