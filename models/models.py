@@ -10,11 +10,13 @@ def create_model(opt):
         assert(opt.dataset_mode == 'aligned')
         from .pix2pix_model import Pix2PixModel
         model = Pix2PixModel()
+
     elif opt.model == 'test':
         assert(opt.dataset_mode == 'single')
         from .test_model import TestModel
         model = TestModel()
-    elif opt.model == 'fader_gan':
+
+    elif opt.model == 'fader_gan':      # note: this is for both train and test
         from .fader_gan_model import FaderGANModel
         model = FaderGANModel()
     else:

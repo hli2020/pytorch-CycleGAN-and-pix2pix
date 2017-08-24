@@ -7,6 +7,9 @@ from util.visualizer import Visualizer
 from pdb import set_trace as st
 from util import html
 
+# --dataroot datasets/celebA/Img/img_align_celeba --name fader_debug
+# --model fader_gan --dataset_mode celebrA --resize_or_crop scale_width_and_crop --gpu_id 1
+
 opt = TestOptions().parse()
 opt.nThreads = 1   # test code only supports nThreads = 1
 opt.batchSize = 1  # test code only supports batchSize = 1
@@ -27,8 +30,7 @@ for i, data in enumerate(dataset):
     model.set_input(data)
     model.test()
     visuals = model.get_current_visuals()
-    img_path = model.get_image_paths()
-    print('process image... %s' % img_path)
-    visualizer.save_images(webpage, visuals, img_path)
+    print('process image... %s' % model.image_paths)
+    visualizer.save_images(webpage, visuals, model.image_paths)
 
 webpage.save()
