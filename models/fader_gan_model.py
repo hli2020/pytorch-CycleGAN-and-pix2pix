@@ -8,6 +8,14 @@ from .base_model import BaseModel
 from . import networks
 import numpy as np
 
+def _make_anno(value):
+
+    anno = torch.zeros(1, 40)
+    for i in value:
+        anno[0, i-1] = 1
+    anno = torch.cat((anno, (1 - anno)), dim=1).cuda()
+    return anno.resize_([1, 80, 1, 1])
+
 # hyli: this file is of VITAL importance
 class FaderGANModel(BaseModel):
     def name(self):
@@ -15,10 +23,8 @@ class FaderGANModel(BaseModel):
 
     def initialize(self, opt):
         BaseModel.initialize(self, opt)
-
         self.gpu_mode = (len(opt.gpu_ids) > 1) | (opt.gpu_ids != -1)
-        self.united_optim = opt.united_optim
-        self.factor = opt.factor
+
         # load/define networks
         self.fader_encoder = networks.define_fader_encoder(ngf=opt.ngf,
                                                            which_structure=opt.which_structure,
@@ -26,12 +32,28 @@ class FaderGANModel(BaseModel):
         self.fader_decoder = networks.define_fader_decoder(opt.ngf, opt.which_structure, gpu_ids=opt.gpu_ids)
 
         if self.isTrain:
+            self.united_optim = opt.united_optim
+            self.factor = opt.factor
             use_sigmoid = opt.no_lsgan
             self.netD = networks.define_D(opt.input_nc, opt.ndf, opt.which_structure,
                                           use_sigmoid=use_sigmoid, gpu_ids=self.gpu_ids, attri_n=opt.attri_n)
+        else:
+            self.hyli_test_dict = {
+                'all': list(range(1, 41)),
+                'young': [40],
+                'attractive': [3],
+                'big lips': [7],
+                'blond hair': [10],
+                'eyeglasses': [16],
+                'male': [21],
+                'mustache': [23],
+                'young, mustache': [40, 23],
+                'young, attractive': [40, 3],
+                'young, attractive, blond hair': [40, 3, 10]
+            }
 
-        # resume
-        # TODO: lr, epoch_iter are NOT udpated (still from zero-index)
+        # resume or test
+        # TODO: for resume lr, epoch_iter index are NOT udpated (still from zero-index)
         if not self.isTrain or opt.continue_train:
             which_epoch = opt.which_epoch
             self.load_network(self.fader_decoder, 'fader_decoder', which_epoch)
@@ -58,8 +80,6 @@ class FaderGANModel(BaseModel):
                                                 lr=opt.lr, betas=(opt.beta1, 0.999))
 
         if self.gpu_mode:
-            self.criterion_bce.cuda()
-            self.criterion_mse.cuda()
             # if len(self.gpu_ids) > 1:
             #     self.fader_decoder = torch.nn.DataParallel(self.fader_decoder, device_ids=self.gpu_ids).cuda()
             #     self.fader_encoder = torch.nn.DataParallel(self.fader_encoder, device_ids=self.gpu_ids).cuda()
@@ -67,7 +87,11 @@ class FaderGANModel(BaseModel):
             # else:
             self.fader_decoder.cuda()
             self.fader_encoder.cuda()
-            self.netD.cuda()
+
+            if self.isTrain:
+                self.criterion_bce.cuda()
+                self.criterion_mse.cuda()
+                self.netD.cuda()
 
         print('---------- Networks initialized -------------')
         networks.print_network(self.fader_encoder)
@@ -86,21 +110,25 @@ class FaderGANModel(BaseModel):
         temp_ = torch.t(torch.stack(input['anno']))
         mask = torch.eq(temp_, -1)
         temp_[mask] = 0
-        self.target = Variable(temp_.float().cuda())
+        self.target = Variable(temp_.float().cuda())    # shape [1 x 40]
         self.anno = torch.cat((temp_, (1 - temp_)), dim=1).float().cuda()
         actual_batch_size = self.image.shape[0]
         self.anno.resize_([actual_batch_size, 2*self.opt.attri_n, 1, 1])
         self.image_paths = input['im_path']
 
-    def test(self):
-        # TODO
-        self.real_A = Variable(self.input_A, volatile=True)
-        self.fake_B = self.netG_A.forward(self.real_A)
-        self.rec_A = self.netG_B.forward(self.fake_B)
 
-        self.real_B = Variable(self.input_B, volatile=True)
-        self.fake_A = self.netG_B.forward(self.real_B)
-        self.rec_B = self.netG_A.forward(self.fake_A)
+    def test(self):
+
+        encoder_out = self.fader_encoder.forward(Variable(self.image, volatile=True))
+        decoder_out = self.fader_decoder.forward(encoder_out, Variable(self.anno, volatile=True))
+        self.decoder_out = decoder_out
+
+        self.test_result = dict(self.hyli_test_dict)
+
+        for key, value in self.hyli_test_dict.items():
+            _anno = _make_anno(value)
+            _out = self.fader_decoder.forward(encoder_out, Variable(_anno, volatile=True))
+            self.test_result.update({key: _out})
 
     def optimize_parameters(self):
 
@@ -159,23 +187,16 @@ class FaderGANModel(BaseModel):
         return OrderedDict([('loss_all', loss_all), ('loss_bce_decoder', loss_bce_decoder),
                             ('loss_bce_disc', loss_bce_disc), ('loss_mse', loss_mse)])
 
-
     def get_current_visuals(self):
-        # DEPRECATED
-        real_A = util.tensor2im(self.real_A.data)
-        fake_B = util.tensor2im(self.fake_B.data)
-        rec_A = util.tensor2im(self.rec_A.data)
-        real_B = util.tensor2im(self.real_B.data)
-        fake_A = util.tensor2im(self.fake_A.data)
-        rec_B = util.tensor2im(self.rec_B.data)
-        if self.opt.identity > 0.0:
-            idt_A = util.tensor2im(self.idt_A.data)
-            idt_B = util.tensor2im(self.idt_B.data)
-            return OrderedDict([('real_A', real_A), ('fake_B', fake_B), ('rec_A', rec_A), ('idt_B', idt_B),
-                                ('real_B', real_B), ('fake_A', fake_A), ('rec_B', rec_B), ('idt_A', idt_A)])
-        else:
-            return OrderedDict([('real_A', real_A), ('fake_B', fake_B), ('rec_A', rec_A),
-                                ('real_B', real_B), ('fake_A', fake_A), ('rec_B', rec_B)])
+        # for test only
+        image = util.tensor2im(self.image)
+        decoder_out = util.tensor2im(self.decoder_out.data)
+        out_dict_list = [('image', image), ('decoder_out', decoder_out)]
+
+        for key, value in self.test_result.items():
+            _out_value = util.tensor2im(value.data)
+            out_dict_list.append((key, _out_value))
+        return OrderedDict(out_dict_list)
 
     def save(self, label):
         self.save_network(self.netD, 'netD', label, self.gpu_ids)

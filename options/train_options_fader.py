@@ -21,9 +21,7 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--lr', type=float, default=0.0002, help='initial learning rate for adam')
 
         self.parser.add_argument('--no_lsgan', action='store_true', help='do *not* use least square GAN, if false, use vanilla GAN')
-        self.parser.add_argument('--train_size', type=int, default=162770) #162770
-        self.parser.add_argument('--anno_file', type=str, default='datasets/celebA/Anno/list_attr_celeba_hyli.txt')
-        self.parser.add_argument('--attri_n', type=int, default=40)
+        self.parser.add_argument('--train_size', type=int, default=2000) #162770) #162770
         self.parser.add_argument('--factor', type=float, default=0.0001)
         self.parser.add_argument('--united_optim', action='store_true')
 

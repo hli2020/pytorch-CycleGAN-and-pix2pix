@@ -48,6 +48,9 @@ class BaseOptions():
         self.parser.add_argument('--resize_or_crop', type=str, default='resize_and_crop', help='scaling and cropping of images at load time [resize_and_crop|crop|scale_width|scale_width_and_crop]')
         self.parser.add_argument('--no_flip', action='store_true', help='if specified, do not flip the images for data augmentation')
 
+        self.parser.add_argument('--anno_file', type=str, default='datasets/celebA/Anno/list_attr_celeba_hyli.txt')
+        self.parser.add_argument('--attri_n', type=int, default=40)
+
         self.initialized = True
 
     def parse(self):
@@ -69,15 +72,20 @@ class BaseOptions():
 
         args = vars(self.opt)
 
-        print('------------ Options -------------')
+        if self.opt.isTrain:
+            print('------------ Training Options -------------')
+            expr_dir = os.path.join(self.opt.checkpoints_dir, self.opt.name)
+        else:
+            print('------------ Test Options -------------')
+            expr_dir = os.path.join(self.opt.results_dir, self.opt.name)
+
         for k, v in sorted(args.items()):
             print('%s: %s' % (str(k), str(v)))
         print('-------------- End ----------------')
 
         # save to the disk
-        expr_dir = os.path.join(self.opt.checkpoints_dir, self.opt.name)
         util.mkdirs(expr_dir)
-        file_name = os.path.join(expr_dir, 'opt.txt')
+        file_name = os.path.join(expr_dir, 'opt_{:s}.txt'.format(self.opt.phase))
         with open(file_name, 'wt') as opt_file:
             opt_file.write('------------ Options -------------\n')
             for k, v in sorted(args.items()):

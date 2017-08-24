@@ -18,8 +18,16 @@ class CelebrADataset(BaseDataset):
                 anno = [int(x) for x in temp if x !='']
                 anno_info.append(anno)
 
-        for i in range(opt.train_size):
-            fname = '{:06d}.jpg'.format(i+1)
+        if opt.phase == 'train':    # 1:162770
+            start_id, end_id = 1, opt.train_size
+            anno_info = anno_info[:opt.train_size]
+
+        elif opt.phase == 'test':   # 182638:202599
+            start_id, end_id = 182638, 202599
+            anno_info = anno_info[start_id-1:end_id]
+
+        for i in range(start_id, end_id+1):
+            fname = '{:06d}.jpg'.format(i)
             if is_image_file(fname):
                 path = os.path.join(self.root, fname)
                 im_paths.append(path)
