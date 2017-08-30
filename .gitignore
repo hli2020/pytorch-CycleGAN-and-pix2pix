@@ -4,6 +4,8 @@
 debug*
 datasets/celebA/
 datasets/consumer2shop
+datasets/consumer2shop_fuck
+datasets/consumer2shop_paired
 *.jpg
 !imgs/edges2cats.jpg
 checkpoints/
