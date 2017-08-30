@@ -10,8 +10,8 @@ class BaseOptions():
 
     def initialize(self):
         self.parser.add_argument('--dataroot', required=True, help='path to images (should have subfolders trainA, trainB, valA, valB, etc)')
-        self.parser.add_argument('--loadSize', type=int, default=286, help='scale images to this size')
-        self.parser.add_argument('--fineSize', type=int, default=256, help='then crop to this size')
+        self.parser.add_argument('--loadSize', type=int, default=224, help='scale images to this size') # 286
+        self.parser.add_argument('--fineSize', type=int, default=200, help='then crop to this size') # 256
 
         self.parser.add_argument('--input_nc', type=int, default=3, help='# of input image channels')
         self.parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels')

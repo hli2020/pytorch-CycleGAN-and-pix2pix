@@ -6,6 +6,12 @@ from util.visualizer import Visualizer
 from torch.autograd import Variable
 from util.functional_zoo.visualize import make_dot
 
+# RUN THE FOLLOWING FOR CLOTHE DATASET
+# python train.py --dataroot datasets/consumer2shop_fuck --name clothe_cycle_gan
+# --model cycle_gan --resize_or_crop scale_width_and_crop --gpu_ids 0,1 --no_dropout
+# --display_port PORT_ID
+
+# TO LAUNCH VISDOM: python -m visdom.server -port PORT_ID
 opt = TrainOptions().parse()
 data_loader = CreateDataLoader(opt)
 dataset = data_loader.load_data()

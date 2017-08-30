@@ -157,10 +157,7 @@ class Encoder(nn.Module):
         self.model = nn.Sequential(*model)
 
     def forward(self, input):
-        #TODO: for now it is not ready for multiple GPUs
-        # if self.gpu_ids and isinstance(input.data, torch.cuda.FloatTensor):
-        #     return nn.parallel.data_parallel(self.model, input, self.gpu_ids)
-        # else:
+
         return self.model(input)
 
 
@@ -204,16 +201,10 @@ class Decoder(nn.Module):
         self.final_pad = model[-3]
         self.final_tanh = model[-1]
 
-        # self.model = nn.Sequential(*model)
         self.cat_model = cat_model
         self.model = model
 
     def forward(self, input, anno):
-        # TODO: for now only apply single GPU mode for the decoder
-        # if len(self.gpu_ids) > 1 and isinstance(input.data, torch.cuda.FloatTensor):
-        #     return nn.parallel.data_parallel(self.model, input, self.gpu_ids)
-        # else:
-        #     return self.model(input, anno)
 
         ft = input
         for i in range(self.n_repeat):

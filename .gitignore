@@ -3,6 +3,7 @@
 .idea/*
 debug*
 datasets/celebA/
+datasets/consumer2shop
 *.jpg
 !imgs/edges2cats.jpg
 checkpoints/

@@ -38,6 +38,7 @@ class FaderGANModel(BaseModel):
             self.netD = networks.define_D(opt.input_nc, opt.ndf, opt.which_structure,
                                           use_sigmoid=use_sigmoid, gpu_ids=self.gpu_ids, attri_n=opt.attri_n)
         else:
+            # test mode
             self.hyli_test_dict = {
                 'all': list(range(1, 41)),
                 'young': [40],
@@ -80,18 +81,22 @@ class FaderGANModel(BaseModel):
                                                 lr=opt.lr, betas=(opt.beta1, 0.999))
 
         if self.gpu_mode:
-            # if len(self.gpu_ids) > 1:
-            #     self.fader_decoder = torch.nn.DataParallel(self.fader_decoder, device_ids=self.gpu_ids).cuda()
-            #     self.fader_encoder = torch.nn.DataParallel(self.fader_encoder, device_ids=self.gpu_ids).cuda()
-            #     self.netD = torch.nn.DataParallel(self.netD, device_ids=self.gpu_ids).cuda()
-            # else:
-            self.fader_decoder.cuda()
-            self.fader_encoder.cuda()
+            if len(self.gpu_ids) > 1:
+                # TODO: for now only apply single GPU mode for the decoder (got error "Tensors on multiple GPUs")
+                self.fader_decoder.cuda()
+                # self.fader_decoder = torch.nn.DataParallel(self.fader_decoder, device_ids=self.gpu_ids).cuda()
+                self.fader_encoder = torch.nn.DataParallel(self.fader_encoder, device_ids=self.gpu_ids).cuda()
+            else:
+                self.fader_decoder.cuda()
+                self.fader_encoder.cuda()
 
             if self.isTrain:
                 self.criterion_bce.cuda()
                 self.criterion_mse.cuda()
-                self.netD.cuda()
+                if len(self.gpu_ids) > 1:
+                    self.netD = torch.nn.DataParallel(self.netD, device_ids=self.gpu_ids).cuda()
+                else:
+                    self.netD.cuda()
 
         print('---------- Networks initialized -------------')
         networks.print_network(self.fader_encoder)
