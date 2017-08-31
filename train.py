@@ -7,9 +7,7 @@ from torch.autograd import Variable
 from util.functional_zoo.visualize import make_dot
 
 # RUN THE FOLLOWING FOR CLOTHE DATASET
-# python train.py --dataroot datasets/consumer2shop_fuck --name clothe_cycle_gan
-# --model cycle_gan --resize_or_crop scale_width_and_crop --gpu_ids 0,1 --no_dropout
-# --display_port PORT_ID
+# python train.py --dataroot datasets/consumer2shop_fuck/merge_blouse --name blouse_cycle_gan --model cycle_gan --resize_or_crop scale_width_and_crop --gpu_ids 3,4 --no_dropout --display_port 1130
 
 # TO LAUNCH VISDOM: python -m visdom.server -port PORT_ID
 opt = TrainOptions().parse()
