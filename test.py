@@ -10,6 +10,8 @@ from util import html
 # --dataroot datasets/celebA/Img/img_align_celeba --name fader_debug
 # --model fader_gan --dataset_mode celebrA --resize_or_crop scale_width_and_crop --gpu_id 1
 
+# python test.py --dataroot datasets/consumer2shop_fuck/merge_blouse --name blouse_cycle_gan --model cycle_gan --resize_or_crop scale_width_and_crop --no_dropout
+
 opt = TestOptions().parse()
 opt.nThreads = 1   # test code only supports nThreads = 1
 opt.batchSize = 1  # test code only supports batchSize = 1

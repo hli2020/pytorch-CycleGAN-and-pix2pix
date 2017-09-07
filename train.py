@@ -7,20 +7,22 @@ from torch.autograd import Variable
 from util.functional_zoo.visualize import make_dot
 
 # RUN THE FOLLOWING FOR CLOTHE DATASET
-# python train.py --dataroot datasets/consumer2shop_fuck/merge_blouse --name blouse_cycle_gan --model cycle_gan --resize_or_crop scale_width_and_crop --gpu_ids 3,4 --no_dropout --display_port 1130
+# python train.py --dataroot datasets/consumer2shop_unpaired/merge_blouse_clean/set1
+# --name blouse_set1 --resize_or_crop scale_width_and_crop --no_dropout --display_port 1130
 
 # TO LAUNCH VISDOM: python -m visdom.server -port PORT_ID
+# for gpu_ids run CUDA_VISIBLE_DEVICES in the terminal
+
 opt = TrainOptions().parse()
 data_loader = CreateDataLoader(opt)
 dataset = data_loader.load_data()
 dataset_size = len(data_loader)
-print('#training images = %d' % dataset_size)
+print('# set A training images = %d' % dataset_size)
 
 model = create_model(opt)
 visualizer = Visualizer(opt)
 
 total_steps = 0
-
 # does not work for now :\
 visualize_net = False #True
 if visualize_net:

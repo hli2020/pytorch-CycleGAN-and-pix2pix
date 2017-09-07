@@ -1,12 +1,12 @@
 *.DS_Store
-
+*.jpg
 .idea/*
 debug*
 datasets/celebA/
-datasets/consumer2shop
-datasets/consumer2shop_fuck
+datasets/consumer2shop_raw
+datasets/consumer2shop_unpaired
 datasets/consumer2shop_paired
-*.jpg
+
 !imgs/edges2cats.jpg
 checkpoints/
 results/

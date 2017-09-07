@@ -20,16 +20,14 @@ class BaseOptions():
 
         self.parser.add_argument('--which_model_netD', type=str, default='basic', help='selects model to use for netD')
         self.parser.add_argument('--which_model_netG', type=str, default='resnet_9blocks', help='selects model to use for netG')
-        self.parser.add_argument('--which_structure', type=str, default='paper_default')
         self.parser.add_argument('--n_layers_D', type=int, default=3, help='only used if which_model_netD==n_layers')
-        self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
+        # self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
-        self.parser.add_argument('--name', type=str, default='experiment_name', help='name of the experiment. It decides where to store samples and models')
+        self.parser.add_argument('--name', type=str, default='experiment_name', help='It decides where to store samples and models')
         self.parser.add_argument('--dataset_mode', type=str, default='unaligned',
                                  help='chooses how datasets are loaded. [unaligned | aligned | single | celebrA]')
         self.parser.add_argument('--model', type=str, default='cycle_gan',
                                  help='chooses which model to use. cycle_gan, pix2pix, test, fader_gan')
-
         self.parser.add_argument('--which_direction', type=str, default='AtoB', help='AtoB or BtoA')
 
         self.parser.add_argument('--nThreads', default=2, type=int, help='# threads for loading data')
@@ -48,6 +46,8 @@ class BaseOptions():
         self.parser.add_argument('--resize_or_crop', type=str, default='resize_and_crop', help='scaling and cropping of images at load time [resize_and_crop|crop|scale_width|scale_width_and_crop]')
         self.parser.add_argument('--no_flip', action='store_true', help='if specified, do not flip the images for data augmentation')
 
+        # for fader network only
+        self.parser.add_argument('--which_structure', type=str, default='paper_default')
         self.parser.add_argument('--anno_file', type=str, default='datasets/celebA/Anno/list_attr_celeba_hyli.txt')
         self.parser.add_argument('--attri_n', type=int, default=40)
 
@@ -59,16 +59,15 @@ class BaseOptions():
         self.opt = self.parser.parse_args()
         self.opt.isTrain = self.isTrain   # train or test
 
-        str_ids = self.opt.gpu_ids.split(',')
-        self.opt.gpu_ids = []
-        for str_id in str_ids:
-            id = int(str_id)
-            if id >= 0:
-                self.opt.gpu_ids.append(id)
-        
+        # str_ids = self.opt.gpu_ids.split(',')
+        # self.opt.gpu_ids = []
+        # for str_id in str_ids:
+        #     id = int(str_id)
+        #     if id >= 0:
+        #         self.opt.gpu_ids.append(id)
         # set gpu ids
-        if len(self.opt.gpu_ids) > 0:
-            torch.cuda.set_device(self.opt.gpu_ids[0])
+        # if len(self.opt.gpu_ids) > 0:
+        #     torch.cuda.set_device(self.opt.gpu_ids[0])
 
         args = vars(self.opt)
 
