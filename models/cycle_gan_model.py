@@ -88,6 +88,10 @@ class CycleGANModel(BaseModel):
         input_B = input['B' if AtoB else 'A']
         self.input_A.resize_(input_A.size()).copy_(input_A)
         self.input_B.resize_(input_B.size()).copy_(input_B)
+        if torch.cuda.is_available():
+            self.input_A = self.input_A.cuda()
+            self.input_B = self.input_B.cuda()
+
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
     def forward(self):
