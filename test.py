@@ -10,7 +10,8 @@ from util import html
 # --dataroot datasets/celebA/Img/img_align_celeba --name fader_debug
 # --model fader_gan --dataset_mode celebrA --resize_or_crop scale_width_and_crop --gpu_id 1
 
-# python test.py --dataroot datasets/consumer2shop_fuck/merge_blouse --name blouse_cycle_gan --model cycle_gan --resize_or_crop scale_width_and_crop --no_dropout
+# python test.py --dataroot datasets/consumer2shop_unpaired/merge_blouse_set1
+# --name blouse_set1 --resize_or_crop scale_width_and_crop --no_dropout
 
 opt = TestOptions().parse()
 opt.nThreads = 1   # test code only supports nThreads = 1
@@ -27,7 +28,7 @@ web_dir = os.path.join(opt.results_dir, opt.name, '%s_%s' % (opt.phase, opt.whic
 webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.which_epoch))
 # test
 for i, data in enumerate(dataset):
-    if i >= opt.how_many:
+    if (opt.how_many > 0) & (i >= opt.how_many):
         break
     model.set_input(data)
     model.test()
